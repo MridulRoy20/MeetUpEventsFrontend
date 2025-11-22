@@ -1,126 +1,246 @@
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import useFetch from "../useFetch";
 import Header from "../components/Header";
 
-const MeetupDetails = () => {
-    const eventName = useParams();
-    console.log(eventName.meetupTitle);
-    const {data, loading, error} = useFetch("https://meetup-backend-eight.vercel.app/meetup")
+const API_BASE_URL = "https://meet-up-events-backend.vercel.app"; 
 
-    const eventData = data? data.find(d => d.eventTitle === eventName.meetupTitle) : null;
-    console.log(eventData);
-    
-    const formatDateTime = (dateStr) => {
-        const date = new Date(dateStr);
-        
-        const dateOption = {weekday: "short", day: "numeric", year: "numeric", month: "short"}
-        const datePart = date.toLocaleDateString("en-US", dateOption);
-
-        const timeOption = {hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata"}
-        const timePart = date.toLocaleTimeString("en-US", timeOption)
-
-        return `${datePart} • ${timePart} IST`
-
-    }
-
-    return(
-        <div className="bg-light">
-            <Header/>
-
-            <main className="container">
-                
-                {eventData ?<div className="row">
-                    <div className="col-md-8">
-                        <h1>{eventData.eventTitle}</h1>
-
-                        <h5 className="fw-normal">Hosted By:</h5>
-                        <p className="fs-5"><strong>{eventData.host}</strong></p>
-
-                        <img src={eventData.eventImageUrl} alt={eventData.eventTitle} height={300} width={500}/>
-                        
-                        <h5 className="mt-3">Details:</h5>
-                        <p>{eventData.eventDetails}</p>
-
-                        <h5>Additional Information:</h5>
-
-                        <p><strong>Dress Code:</strong> {eventData.dressCode}</p>
-
-                        <p><strong>Age Restriction:</strong> {eventData.ageRestrictions ? `${eventData.ageRestrictions} and above` : "None"}</p>
-                    
-                        <h4>Event Tags:</h4>
-
-                        {eventData.eventTags.map(tag => (
-                            <button className="btn btn-danger me-3">{tag}</button>
-                            
-                        ))}
-                    </div>
-
-                    <div className="col-md-4">
-                        <div className="card border-0 p-3">
-                            <div className="card-body">
-
-                            <div className="mb-2 d-flex">
-                                <i className="pt-2 bi bi-clock me-2 "></i>
-                                <div>
-                                    {formatDateTime(eventData.startDateTime)} to <br/>{formatDateTime(eventData.endDateTime)}
-                                    
-                                </div>
-                            </div>
-
-                                <div className="mb-2 d-flex ">
-                                    
-                                        <i className="pt-1 bi bi-geo-alt me-2 "></i>
-                                    
-                                    <div>
-                                        <p>{eventData.address}</p>
-                                    </div>
-                                    
-                                </div>
-                                <div className=" d-flex ">
-                                    
-                                        <i className=" bi bi-currency-rupee me-2 "></i>
-                                    
-                                    <div>
-                                        <p>{eventData.price}</p>
-                                    </div>
-                                    
-                                </div>
-
-                                
-                                
-                            </div>
-                        </div>
-                        
-                        <div className="mt-4">
-                            <h3>Speakers: ({eventData.speakers.length})</h3>
-
-                        </div>
-                        <div>
-                            <div className="row mt-4">
-                                {eventData.speakers.map(speaker => (
-                                    <div className="col">
-                                    <div className="card border-0 shadow text-center">
-                                        <div className="card-body">
-                                            <img src={speaker.speakerImageUrl} className="rounded-circle mx-auto d-block mb-2" height={70} width={70}/>
-                                            <p className="card-text"><strong>{speaker.speakerName}</strong></p>
-                                            {speaker.speakerDesignation}
-                                        </div>
-                                    </div>
-                                </div>
-                                ))}
-                                
-                                
-
-                            </div>
-                        </div>
-
-                    </div>
-                </div>: null}
-                <br/><br/>
-            </main>
-
-        </div>
-    )
+// Helper: format date nicely
+function formatEventDate(dateStr) {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  return date.toLocaleString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-export default MeetupDetails;
+function EventDetails() {
+  const { id } = useParams();
+  const [event, setEvent] = useState(null);
+  const [attendeeInput, setAttendeeInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [rsvpLoading, setRsvpLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [rsvpError, setRsvpError] = useState("");
+
+  const [toast, setToast] = useState("");
+
+  // Helper: fetch a single event
+  async function fetchEvent() {
+    try {
+      setLoading(true);
+      setError("");
+      const res = await fetch(`${API_BASE_URL}/events/${id}`);
+      if (!res.ok) {
+        throw new Error("Failed to fetch event");
+      }
+      const data = await res.json();
+      setEvent(data);
+    } catch (err) {
+      console.error("Error fetching event:", err);
+      setError(err.message || "Failed to load event");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchEvent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  // Helper: handle RSVP submit
+  async function handleRsvp(e) {
+    e.preventDefault();
+    setRsvpError("");
+
+    if (!attendeeInput.trim()) {
+      setRsvpError("Please enter your name or email to RSVP.");
+      return;
+    }
+
+    try {
+      setRsvpLoading(true);
+      const res = await fetch(`${API_BASE_URL}/events/${id}/rsvp`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ attendee: attendeeInput.trim() }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to RSVP");
+      }
+
+      const updatedEvent = await res.json();
+      setEvent(updatedEvent);
+      setAttendeeInput("");
+
+      setToast("RSVP submitted successfully!");
+      setTimeout(() => setToast(""), 2000);
+    } catch (err) {
+      console.error("Error sending RSVP:", err);
+      setRsvpError(err.message || "Failed to RSVP");
+    } finally {
+      setRsvpLoading(false);
+    }
+  }
+      async function handleDelete() {
+      const confirmDelete = window.confirm(
+        "Are you sure you want to delete this event?"
+      );
+
+      if (!confirmDelete) return;
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/events/${id}`, {
+          method: "DELETE",
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.error || "Failed to delete event");
+        }
+
+        alert("Event deleted successfully!");
+        window.location.href = "/";
+      } catch (err) {
+        console.error("Delete error:", err);
+        alert(err.message);
+      }
+    }
+
+
+  return (
+    <>
+      <Header />
+
+      {toast && <div className="simple-toast">{toast}</div>}
+
+      <main className="bg-light py-4">
+        <div className="container">
+          {loading && (
+            <div className="d-flex justify-content-center my-5">
+              <div className="spinner-border text-danger" role="status"></div>
+            </div>
+          )}
+          {error && (
+            <div className="alert alert-danger">
+              {error}
+            </div>
+          )}
+          <button 
+            className="btn btn-outline-secondary mb-3"
+            onClick={() => window.history.back()}
+          >
+            ← Back
+          </button>
+
+
+          {event && (
+            <div className="card shadow-sm">
+              {event.imageUrl && (
+                <img
+                  src={event.imageUrl}
+                  className="card-img-top"
+                  alt={event.title}
+                  style={{ maxHeight: "300px", objectFit: "cover" }}
+                />
+              )}
+              <div className="card-body">
+                <h2 className="card-title fw-bold mb-2">{event.title}</h2>
+                <p className="text-muted mb-1">
+                  {formatEventDate(event.date)}
+                </p>
+                <p className="text-muted mb-3">
+                  <i className="bi bi-geo-alt-fill me-1"></i>
+                  {event.location}
+                </p>
+
+                <p className="card-text mb-3">{event.description}</p>
+
+                <div className="mb-3 d-flex flex-wrap gap-2">
+                  {(event.tags || []).map((tag, idx) => (
+                    <span className="badge bg-secondary" key={idx}>
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+
+                <hr />
+
+                {/* RSVP section */}
+                <section className="mb-3">
+                  <h5>RSVP</h5>
+                  <form className="row g-2" onSubmit={handleRsvp}>
+                    <div className="col-md-8">
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Enter your name or email"
+                        value={attendeeInput}
+                        onChange={(e) => setAttendeeInput(e.target.value)}
+                      />
+                    </div>
+                    <div className="col-md-4">
+                      <button
+                        type="submit"
+                        className="btn btn-danger w-100"
+                        disabled={rsvpLoading}
+                      >
+                        {rsvpLoading ? "Submitting..." : "RSVP"}
+                      </button>
+                    </div>
+                  </form>
+                  {rsvpError && (
+                    <div className="mt-2 alert alert-danger py-1">
+                      {rsvpError}
+                    </div>
+                  )}
+                </section>
+
+                {/* Attendees list */}
+                <section>
+                  <h6 className="mb-1">
+                    Attendees ({event.attendees?.length || 0})
+                  </h6>
+                  {event.attendees && event.attendees.length > 0 ? (
+                    <ul className="list-group list-group-flush">
+                      {event.attendees.map((att, idx) => (
+                        <li className="list-group-item" key={idx}>
+                          {att}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-muted">
+                      No attendees yet. Be the first to RSVP!
+                    </p>
+                  )}
+                </section>
+                {/* DELETE EVENT */}
+              <div className="mt-4">
+                <button
+                  className="btn btn-outline-danger w-100"
+                  onClick={handleDelete}
+                >
+                  Delete Event
+                </button>
+              </div>
+
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
+    </>
+  );
+}
+
+export default EventDetails;

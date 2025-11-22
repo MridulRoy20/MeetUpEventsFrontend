@@ -1,22 +1,16 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
-import Header from './components/Header'
-import 'bootstrap/dist/css/bootstrap.min.css'
-import HomePage from './Pages/HomePage'
-import 'bootstrap-icons/font/bootstrap-icons.css';
+import { Outlet } from "react-router-dom";
+import "./App.css";
+import "bootstrap/dist/css/bootstrap.min.css";
+import "bootstrap-icons/font/bootstrap-icons.css";
 
 function App() {
-  
-
+  // Simple layout wrapper: header is inside each page currently,
+  // so App just renders the route content.
   return (
-    <div className='bg-light'>
-      <Header />
-
-      <HomePage />
+    <div className="bg-light min-vh-100">
+      <Outlet />
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
